@@ -1,0 +1,2 @@
+# 证书由 seed/ca/gen-ca.sh 生成: ca.pem / server.pem / server-key.pem
+# SAN 必须包含 www.hengyuan.local 与 supplier.hengyuan.local (隐藏 vhost 泄露点)

@@ -1,0 +1,7 @@
+# 与 Jenkins core 2.426.2 兼容的插件 (构建期校验; 如不兼容需调整版本)
+configuration-as-code:1763.vb_fe9c1b_83f7b
+credentials:1311.vcf0a_900b_37c2
+ssh-credentials:326.v189a_332c9615
+plain-credentials:183.va_de8f1dd5a_2b_
+matrix-auth:3.2.1
+git:5.2.1

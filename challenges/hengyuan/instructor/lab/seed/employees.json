@@ -1,0 +1,29 @@
+{
+  "domain": "hengyuan.local",
+  "realm": "HENGYUAN.LOCAL",
+  "netbios": "HENGYUAN",
+  "departments": ["财务部", "采购部", "信息技术部", "人力资源部", "总裁办"],
+  "employees": [
+    {"uid": 1001, "username": "zhang_wei", "name": "张伟", "dept": "财务部", "role": "财务专员", "email": "zhang_wei@hengyuan.local", "password": "Zhangwei@2023", "note": "portal 可预测重置 token 接管目标; OA 审批第2步"},
+    {"uid": 1002, "username": "li_na", "name": "李娜", "dept": "财务部", "role": "财务总监", "email": "li_na@hengyuan.local", "password": "Lina@2023", "note": "OA 审批第3步门控 (状态机缺陷绕过目标)"},
+    {"uid": 1003, "username": "wang_fang", "name": "王芳", "dept": "采购部", "role": "采购专员", "email": "wang_fang@hengyuan.local", "password": "Wangfang@2023"},
+    {"uid": 1004, "username": "liu_yang", "name": "刘洋", "dept": "信息技术部", "role": "运维工程师", "email": "liu_yang@hengyuan.local", "password": "Liuyang@2023", "note": "Gitea commit 作者"},
+    {"uid": 1005, "username": "chen_jing", "name": "陈静", "dept": "人力资源部", "role": "HR专员", "email": "chen_jing@hengyuan.local", "password": "Chenjing@2023"},
+    {"uid": 1006, "username": "itadmin", "name": "IT管理员", "dept": "信息技术部", "role": "域管理员", "email": "itadmin@hengyuan.local", "password": "ItAdmin@2023", "note": "Domain Admins; GenericAll over 目标 (svc_backup)"}
+  ],
+  "service_accounts": [
+    {"username": "contractor_li", "name": "李外包", "type": "contractor", "password": "Summer2023!", "uac": 4194816, "note": "AS-REP roast (DONT_REQ_PREAUTH); flag 在 description"},
+    {"username": "svc_sql", "password": "SqlSvc@2023", "spn": "MSSQLSvc/sql01.hengyuan.local:1433", "note": "Kerberoast (RC4 TGS); GenericWrite over svc_backup; flag 在 info"},
+    {"username": "svc_backup", "password": "Backup@2023", "note": "targeted Kerberoast 目标; GenericAll over itadmin (DA); flag 在 info; 凭证经 IT-Backup 泄露"}
+  ],
+  "admin_accounts": [
+    {"system": "gitea", "username": "hyadmin", "password": "GiteaAdmin@2023"},
+    {"system": "jenkins", "username": "admin", "password": "JenkinsAdmin@2023"},
+    {"system": "jenkins", "username": "vendor", "password": "Vendor@2023"},
+    {"system": "nacos", "username": "nacos", "password": "nacos"},
+    {"system": "postgres_app", "username": "hy_app", "password": "PgApp@2023"},
+    {"system": "postgres_super", "username": "postgres", "password": "PgSuper@2023"},
+    {"system": "ad_admin", "username": "administrator", "password": "Hengyuan@DC2023!"},
+    {"system": "fileserver_ssh", "username": "deploy", "key": "seed/keys/id_rsa (私钥经 Gitea infra-deploy 历史泄露)"}
+  ]
+}

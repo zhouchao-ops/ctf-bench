@@ -1,0 +1,51 @@
+# Jenkins Configuration-as-Code
+# 关键 misconfig: Overall/Read:anonymous -> 使 CVE-2024-23897 可全文读取文件
+jenkins:
+  securityRealm:
+    local:
+      allowsSignup: false
+      users:
+        - id: "${JENKINS_ADMIN_USER}"
+          password: "${JENKINS_ADMIN_PW}"
+        - id: "${JENKINS_VENDOR_USER}"
+          password: "${JENKINS_VENDOR_PW}"
+  authorizationStrategy:
+    globalMatrix:
+      permissions:
+        - "Overall/Read:anonymous"
+        - "Overall/Read:vendor"
+        - "Overall/Administer:admin"
+  crumbIssuer:
+    standard:
+      excludeClientIPFromCrumb: true
+  remotingSecurity:
+    enabled: true
+
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              scope: GLOBAL
+              id: "gitea-admin"
+              username: "${GITEA_ADMIN_USER}"
+              password: "${GITEA_ADMIN_PW}"
+              description: "Gitea admin"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "jenkins-admin"
+              username: "${JENKINS_ADMIN_USER}"
+              password: "${JENKINS_ADMIN_PW}"
+              description: "controller admin"
+          - usernamePassword:
+              scope: GLOBAL
+              id: "postgres-creds"
+              username: "${PG_APP_USER}"
+              password: "${PG_APP_PW}"
+              description: "postgres app"
+          - string:
+              scope: GLOBAL
+              id: "jenkins-creds-flag"
+              secret: "${FLAG_JENKINS_CREDS}"
+              description: "milestone flag"
+# deploy-ssh-key (basicSSHUserPrivateKey) 由 init.groovy.d/seed-creds.groovy 从挂载文件注入

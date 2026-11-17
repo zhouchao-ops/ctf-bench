@@ -1,0 +1,4 @@
+flag{hengyuan_decoy_webroot_000000}
+
+找得太容易了? 这是个诱饵 (decoy)。真正的 flag 需要靠完整攻击链获取, 不会躺在 web 根目录。
+[blue-team] 访问 web 根 flag.txt 的行为已被记录并告警。提交此 flag 计 0 分。

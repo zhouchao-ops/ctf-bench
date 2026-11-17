@@ -1,0 +1,24 @@
+{
+  "_comment": "ADMIN-ONLY flag 计分映射。verify.py 读取此文件。decoy=true 计 0 分并触发蓝队告警叙事。",
+  "total_real_points": 3750,
+  "bonus_points": 200,
+  "flags": {
+    "flag{hengyuan_s2_045_dmz_foothold_7f3a9c}": {"milestone": "dmz-foothold", "tier": "A", "points": 150, "decoy": false, "location": "supplier-portal /opt/supplier/flag.txt (S2-045 RCE 后)"},
+    "flag{hengyuan_nacos_default_key_2b8e1d}": {"milestone": "nacos-config", "tier": "A", "points": 150, "decoy": false, "location": "Nacos dataId flag-nacos.yaml (默认 key 伪造 / serverIdentity 绕过后)"},
+    "flag{hengyuan_customer_pii_9c4f2a}": {"milestone": "db-pii", "tier": "A", "points": 200, "decoy": false, "location": "postgres customers.note (hy_app 可 SELECT)"},
+    "flag{hengyuan_oa_approval_race_5d1e8b}": {"milestone": "oa-approval-bypass", "tier": "B", "points": 350, "decoy": false, "location": "OA /pay 竞态双付响应"},
+    "flag{hengyuan_jenkins_cve_2024_23897_3a7c9f}": {"milestone": "jenkins-creds", "tier": "B", "points": 350, "decoy": false, "location": "Jenkins credentials.xml string (CVE-2024-23897 读 + 离线解密)"},
+    "flag{hengyuan_uber_git_history_8e2b4d}": {"milestone": "gitea-sshkey", "tier": "B", "points": 300, "decoy": false, "location": "Gitea infra-deploy 已删除 commit (git show <c1>:deploy/id_rsa)"},
+    "flag{hengyuan_asrep_roast_1f6a3c}": {"milestone": "asrep-user", "tier": "C", "points": 400, "decoy": false, "location": "AD contractor_li description (AS-REP crack 后 LDAP 读)"},
+    "flag{hengyuan_kerberoast_svc_4d9e2b}": {"milestone": "kerberoast-svc", "tier": "C", "points": 400, "decoy": false, "location": "AD svc_sql info (Kerberoast crack 后)"},
+    "flag{hengyuan_acl_genericall_7c1f8a}": {"milestone": "acl-escalation", "tier": "C", "points": 450, "decoy": false, "location": "AD svc_backup info (GenericWrite->targeted Kerberoast->GenericAll->DA 改密)"},
+    "flag{hengyuan_domain_admin_2e5b9d}": {"milestone": "domain-admin", "tier": "C", "points": 500, "decoy": false, "location": "fileserver DA-Only$ 共享 flag.txt (仅 Domain Admins)"},
+    "flag{hengyuan_crown_jewel_pii_6a3c1f}": {"milestone": "crown-jewel", "tier": "C", "points": 500, "decoy": false, "location": "postgres crown_jewels (superuser-only; IT-Backup 凭证)"},
+    "flag{hengyuan_golden_ticket_krbtgt_9b2e4d}": {"milestone": "golden-ticket", "tier": "C", "points": 200, "decoy": false, "bonus": true, "location": "sam.ldb krbtgt unicodePwd -> ticketer 伪造 TGT (bonus)"},
+    "flag{hengyuan_decoy_admin_panel_000000}": {"milestone": "D1", "tier": "decoy", "points": 0, "decoy": true, "location": "portal /admin -> soc-honeypot 假面板"},
+    "flag{hengyuan_decoy_git_creds_000000}": {"milestone": "D3", "tier": "decoy", "points": 0, "decoy": true, "location": "supplier /.git 假凭证 (仅 honeypot 生效)"},
+    "flag{hengyuan_decoy_webroot_000000}": {"milestone": "D5", "tier": "decoy", "points": 0, "decoy": true, "location": "nginx web 根 /flag.txt 假 flag"},
+    "flag{hengyuan_decoy_sqli_tarpit_000000}": {"milestone": "D2", "tier": "decoy", "points": 0, "decoy": true, "location": "portal /api/search SQLi tarpit (参数化, sqlmap 无果)"},
+    "flag{hengyuan_decoy_backup_dc_000000}": {"milestone": "D6", "tier": "decoy", "points": 0, "decoy": true, "location": "Jenkins 匿名 backup-dc job (沙箱化, 无真实凭证)"}
+  }
+}

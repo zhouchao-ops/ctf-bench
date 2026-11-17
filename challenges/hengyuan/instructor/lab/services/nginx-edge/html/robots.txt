@@ -1,0 +1,4 @@
+User-agent: *
+Disallow: /admin
+Disallow: /static/app.js
+# 供应商门户已迁至 supplier.hengyuan.local (遗留系统, 勿索引)

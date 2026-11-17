@@ -51,6 +51,25 @@
       "level": 4,
       "total_score": 120,
       "kind": "artifact"
+    },
+    {
+      "code": "hengyuan-01",
+      "dir": "hengyuan",
+      "title": "恒远集团内网渗透",
+      "category": "Web",
+      "difficulty": 5,
+      "level": 5,
+      "total_score": 1000,
+      "kind": "service",
+      "service": {
+        "script": "instructor/server.py",
+        "host_arg": "--host",
+        "port_arg": "--port",
+        "port": 0,
+        "ready_regex": "^LISTENING\\s+(\\d+)\\s*$",
+        "timeout": 900
+      },
+      "platform_note": "service 型多容器企业内网靶场。container_addr 为 HTTPS 边缘入口(自签证书)，默认 vhost 为集团门户；遗留供应商门户等资产需以 Host: supplier.hengyuan.local 或虚拟主机枚举访问。内网设施仅内网可达，需 pivot。共 4 个 flag，按正确提交比例计分。首次 start 需构建镜像，耗时较长。"
     }
   ]
 }

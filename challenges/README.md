@@ -1,8 +1,12 @@
-# CTF 培训题包（5 题，本地可复现）
+# CTF 培训题包（6 题：5 题本地可复现 + 1 题 Docker 内网靶场）
 
 这是一个面向 CTF 培训的偏难题包，覆盖 **Web / Crypto / Reverse / Pwn / Forensics** 五个方向。
 所有题目、服务、二进制、抓包和 flag 均为本地合成数据，不包含真实目标，不依赖公网，
 不修改系统配置。题包只提供题目与配套环境，不包含计分平台或网站。
+
+其中前 5 题（web/crypto/reverse/pwn/forensics）纯本地、仅用标准库即可复现；第 6 题
+`hengyuan` 是一套多容器企业内网渗透靶场（service 型），需要宿主机 Docker + Docker
+Compose，由 `verify_all.py` 之外的独立脚本启动与验证。
 
 ## 1. 题目总览
 
@@ -13,8 +17,9 @@
 | 3 | 去符号的链式许可证 | Reverse | 去符号 ELF、`.rodata` 数据块、字节置换、相邻字节链 | 160 | 难 | 40–60 分钟 | 无服务；`cd reverse && ./build.sh` |
 | 4 | 双门本地覆盖：cookie 与 admin | Pwn | 随机 challenge、cookie 计算、栈布局、双字段覆盖 | 140 | 中等偏难 | 35–50 分钟 | 无服务；`cd pwn && ./build.sh` |
 | 5 | DNS 隧道里的碎片 | Forensics | PCAP、DNS、TXT 记录、数据重组 | 120 | 难 | 30–45 分钟 | 无服务；`cd forensics && ./generate.sh` |
+| 6 | 恒远集团内网渗透 | Web | 多容器内网、S2-045 RCE、业务逻辑链、git 历史密钥、pivot | 1000 | 难 | 90–180 分钟 | 需 Docker；`cd hengyuan && ./start.sh` / `./stop.sh` |
 
-**总分：640 分。**
+**总分：1640 分（前 5 题 640 + hengyuan 1000）。**
 
 每题都包含：
 
@@ -36,9 +41,12 @@ GCC:     11.4.0 (Ubuntu 11.4.0-1ubuntu1~22.04)
 Binutils: nm / objdump / readelf 可用
 ```
 
-不需要安装第三方 Python 包，不需要 Docker，不需要 root，不需要下载大文件。
+前 5 题不需要安装第三方 Python 包，不需要 Docker，不需要 root，不需要下载大文件。
 `verify_all.py` 只使用 Python 标准库，并调用系统 `gcc`、`nm`、`objdump`、`readelf`。
 如果在其他 Ubuntu 22.04 x86_64 设备上运行，只要具备 `python3`、`gcc`、`binutils` 即可。
+
+**例外**：`hengyuan` 需要 Docker + Docker Compose，首次启动会构建镜像（耗时较长、占用
+较多内存），不在 `verify_all.py` 的 5 题范围内，单独用 `hengyuan/start.sh` 起靶场验证。
 
 ## 3. 目录结构
 
@@ -72,12 +80,18 @@ ctf-training/
 │   ├── instructor/           # src/, build.py, flag.txt, walkthrough.md
 │   ├── solve.py
 │   └── build.sh
-└── forensics/
-    ├── challenge.md
-    ├── public/               # capture.pcap
-    ├── instructor/           # make_pcap.py, flag.txt, walkthrough.md
-    ├── solve.py
-    └── generate.sh
+├── forensics/
+│   ├── challenge.md
+│   ├── public/               # capture.pcap
+│   ├── instructor/           # make_pcap.py, flag.txt, walkthrough.md
+│   ├── solve.py
+│   └── generate.sh
+└── hengyuan/                 # 多容器企业内网靶场（service，需 Docker Compose）
+    ├── challenge.md          # 黑盒题面（仅场景/入口/目标）
+    ├── public/               # 占位说明（无 flag）
+    ├── instructor/           # flag.txt(4)、server.py、walkthrough.md、lab/(compose+services+seed)
+    ├── solve.py              # 参考解（仅恢复 DMZ 立足点 flag）
+    └── start.sh / stop.sh    # docker compose 起停
 ```
 
 ## 4. 一键验证
@@ -95,6 +109,9 @@ python3 verify_all.py
 3. 从每份 `instructor/flag.txt` 读取期望 flag，与解题输出比对；
 4. 检查 `public/` 中是否出现明文 flag；
 5. 关闭 Web 服务，输出 PASS/FAIL 表和耗时。
+
+`hengyuan` 为 Docker service 题，不由 `verify_all.py` 覆盖；单独用 `hengyuan/start.sh`
+起靶场后验证（见下文各题运行方法）。
 
 本机最近一次实际验证结果：
 
@@ -191,6 +208,21 @@ tshark -r public/capture.pcap -Y dns -T fields -e dns.qry.name
 tshark -r public/capture.pcap -Y 'dns.txt' -T fields -e dns.qry.name -e dns.txt
 ```
 
+### Web — 恒远集团内网渗透（hengyuan，需 Docker）
+
+```bash
+cd hengyuan
+./start.sh             # 生成证书/密钥 -> docker compose -f instructor/lab/docker-compose.slim.yml up --build --wait
+# 入口为 HTTPS 自签证书；默认 vhost 反代集团门户，供应商门户需 Host: supplier.hengyuan.local
+python3 solve.py --url https://127.0.0.1:<port>   # 参考解仅恢复 DMZ 立足点 flag
+./stop.sh              # docker compose down -v 回收
+```
+
+- 精简版 9 容器（nginx/portal/soc/supplier/oa/redis/coredns/gitea/postgres），nginx 仅绑
+  `127.0.0.1`，经 SSH 隧道访问；内网设施需 pivot。
+- 4 个 flag 按比例计分（共 1000）：S2-045 RCE 立足点、客户 PII、OA 审批竞态、Gitea git 历史密钥。
+- 首次 `start` 需构建镜像，耗时较长；`instructor/`（含 lab、flag、walkthrough）不下发给学员。
+
 ## 6. 学员分发边界
 
 **通用规则：学员只应收到每题的 `challenge.md` 和 `public/` 目录。**
@@ -202,6 +234,7 @@ tshark -r public/capture.pcap -Y 'dns.txt' -T fields -e dns.qry.name -e dns.txt
 | Reverse | `reverse/challenge.md`、`reverse/public/checker` | `reverse/instructor/`（src、build.py、flag.txt、walkthrough.md）、`reverse/solve.py`、`build.sh` |
 | Pwn | `pwn/challenge.md`、`pwn/public/pwnme` | `pwn/instructor/`、`pwn/solve.py`、`build.sh` |
 | Forensics | `forensics/challenge.md`、`forensics/public/capture.pcap` | `forensics/instructor/`、`forensics/solve.py`、`generate.sh` |
+| Hengyuan | `hengyuan/challenge.md`、`hengyuan/public/` | `hengyuan/instructor/`（lab、flag.txt、server.py、walkthrough.md）、`hengyuan/solve.py`、`start.sh`、`stop.sh` |
 
 边界说明：
 
@@ -215,7 +248,9 @@ tshark -r public/capture.pcap -Y 'dns.txt' -T fields -e dns.qry.name -e dns.txt
 
 - 全部服务只绑定 `127.0.0.1`；不存在远程目标或真实域名。
 - 所有数据（商品、密文、二进制、PCAP、DNS 域名/IP、flag）均为本地合成。
-- 不执行系统配置变更，不安装软件包，不下载大文件，不生成 shell。
+- 前 5 题不执行系统配置变更，不安装软件包，不下载大文件，不生成 shell。`hengyuan` 例外：
+  其 Docker 镜像首次构建会从镜像仓库拉取基础镜像（需网络），靶场本身仍只绑 `127.0.0.1`、
+  数据均为合成、仅用于授权隔离教学。
 - Pwn 只做局部变量覆盖并调用题内 `win()`；第一道门是随机 challenge/cookie，第二道门要求同时满足 `admin` 与 `auth` 两个字段。
 - Reverse 只分析本地 stripped ELF；校验包含字节置换和相邻字节链两层可逆变换。
 - Forensics 的 `10.10.4.x`、`*.training.test` 均为虚构/保留用途地址，不要尝试解析或访问。
@@ -243,7 +278,7 @@ python3 verify_all.py 2>&1 | tee verification-report.txt
 
 ## 9. 完成情况
 
-- 5 道题均已实现，配套环境、题面、附件、生成/构建脚本、讲师 walkthrough 和可运行 `solve.py` 齐全。
+- 6 道题均已实现：前 5 题配套环境、题面、附件、生成/构建脚本、讲师 walkthrough 和可运行 `solve.py` 齐全；`hengyuan` 为多容器 Docker 内网靶场（service 型，4 flag）。
 - Pwn 已升级为“随机 challenge/cookie + `admin`/`auth` 双字段覆盖”的本地玩具，仍只打印 flag，不生成 shell。
 - Reverse 已升级为 stripped 二进制，包含字节置换和相邻字节链两层可逆校验；`solve.py` 只从公开二进制提取数据。
 - 已在本机重新编译并执行 `verify_all.py`，结果 **5/5 PASS**，完整输出见 `verification-report.txt`。

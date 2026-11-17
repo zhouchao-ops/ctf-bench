@@ -1,0 +1,15 @@
+# nginx upstream 配置备份 — 经 /static../upstream.conf.bak 别名穿越泄露
+# 内网主机名/地址 (引导 pivot, 不对外发布端口)
+upstream portal   { server 172.30.1.20:8000; }
+upstream supplier { server 172.30.2.20:8080; }
+
+# 办公网 corp_net (172.30.3.0/24) — 仅内网可达:
+#   oa         172.30.3.31:8000   (泛微风格 OA)
+#   nacos      172.30.3.30:8848   (配置中心)
+#   redis      172.30.3.32:6379
+#   jenkins    172.30.3.40:8080   (CI, 双网卡 corp+devops)
+#   fileserver 172.30.3.50        (ssh/smb, 双网卡 corp+data)
+#   dc01       172.30.3.10        (AD 域控 ldap/kerberos)
+#   coredns    172.30.3.53        (内网 DNS, hengyuan.local)
+# DevOps (172.30.4.0/24): gitea 172.30.4.20:3000
+# 数据区 (172.30.5.0/24): postgres 172.30.5.20:5432

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE struts PUBLIC
+    "-//Apache Software Foundation//DTD Struts Configuration 2.3//EN"
+    "http://struts.apache.org/dtds/struts-2.3.dtd">
+<struts>
+  <!-- 保持默认 jakarta multipart 解析器 (S2-045 触发点)。
+       切勿设置 struts.custom.i18n.resources 之类的 workaround。 -->
+  <constant name="struts.multipart.parser" value="jakarta"/>
+  <constant name="struts.devMode" value="false"/>
+  <constant name="struts.enable.DynamicMethodInvocation" value="false"/>
+
+  <package name="supplier" namespace="/" extends="struts-default">
+    <action name="index" class="com.hengyuan.supplier.IndexAction">
+      <result name="success">/WEB-INF/jsp/index.jsp</result>
+    </action>
+    <action name="upload" class="com.hengyuan.supplier.UploadAction">
+      <result name="success">/WEB-INF/jsp/upload.jsp</result>
+    </action>
+  </package>
+</struts>

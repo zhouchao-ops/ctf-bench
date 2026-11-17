@@ -1,0 +1,529 @@
+# ============================================================================
+# 恒远集团企业渗透靶场 — Docker Compose
+# 仅 nginx-edge 发布 80/443 到宿主机; 所有内网服务仅 expose, 强制多跳 pivot。
+# 双网卡 pivot 主机: supplier-portal(dmz+corp), jenkins(corp+devops),
+#                   fileserver(corp+data), samba-dc(corp+data), nginx-edge(edge+dmz)
+# 仅本地隔离实验使用 (LOCAL ONLY)。
+# ============================================================================
+
+x-common: &common
+  restart: unless-stopped
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+x-tz: &tz
+  TZ: ${TZ}
+
+networks:
+  edge_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${EDGE_SUBNET}
+  dmz_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${DMZ_SUBNET}
+  corp_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${CORP_SUBNET}
+  devops_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${DEVOPS_SUBNET}
+  data_net:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${DATA_SUBNET}
+
+volumes:
+  postgres_data:
+  gitea_data:
+  jenkins_home:
+  samba_private:
+  nacos_data:
+  redis_data:
+  honeypot_logs:
+  dc_backup:
+
+services:
+  # ==========================================================================
+  # 边缘层 (edge_net) — 唯一互联网入口
+  # ==========================================================================
+  nginx-edge:
+    <<: *common
+    build:
+      context: ./services/nginx-edge
+      args:
+        NGINX_IMAGE: ${NGINX_IMAGE}
+    image: hengyuan/nginx-edge:local
+    hostname: nginx-edge
+    networks:
+      edge_net:
+        ipv4_address: 172.30.1.10
+      dmz_net:
+        ipv4_address: 172.30.2.10
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      <<: *tz
+    depends_on:
+      portal:
+        condition: service_started
+      supplier-portal:
+        condition: service_started
+      soc-honeypot:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    mem_limit: 64m
+
+  portal:
+    <<: *common
+    build:
+      context: ./services/portal
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE}
+    image: hengyuan/portal:local
+    hostname: portal
+    networks:
+      edge_net:
+        ipv4_address: 172.30.1.20
+    expose:
+      - "8000"
+    environment:
+      <<: *tz
+      DOMAIN: ${DOMAIN}
+      FINANCE_CLERK_USER: ${FINANCE_CLERK_USER}
+      FINANCE_CLERK_PW: ${FINANCE_CLERK_PW}
+      FINANCE_DIRECTOR_USER: ${FINANCE_DIRECTOR_USER}
+      FINANCE_DIRECTOR_PW: ${FINANCE_DIRECTOR_PW}
+      RESET_TOKEN_WINDOW: ${RESET_TOKEN_WINDOW}
+      FLAG_DECOY_ADMIN: ${FLAG_DECOY_ADMIN}
+      FLAG_DECOY_WEBROOT: ${FLAG_DECOY_WEBROOT}
+      FLAG_DECOY_SEARCH: ${FLAG_DECOY_SEARCH}
+      HONEYPOT_URL: http://172.30.1.30:8000
+    volumes:
+      - ./seed/employees.json:/app/seed/employees.json:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    mem_limit: 128m
+
+  soc-honeypot:
+    <<: *common
+    build:
+      context: ./services/soc-honeypot
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE}
+    image: hengyuan/soc-honeypot:local
+    hostname: soc-honeypot
+    networks:
+      edge_net:
+        ipv4_address: 172.30.1.30
+    expose:
+      - "8000"
+    environment:
+      <<: *tz
+      FLAG_DECOY_ADMIN: ${FLAG_DECOY_ADMIN}
+      FLAG_DECOY_GIT: ${FLAG_DECOY_GIT}
+      # D3 假 .git 凭证仅在此 honeypot 生效
+      DECOY_GIT_USER: backup_admin
+      DECOY_GIT_PW: BackupAdmin@2023
+    volumes:
+      - honeypot_logs:/var/log/honeypot
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    mem_limit: 64m
+
+  # ==========================================================================
+  # DMZ 层 — 遗留供应商门户 (S2-045), 双网卡 dmz+corp = 首个 pivot
+  # ==========================================================================
+  supplier-portal:
+    <<: *common
+    build:
+      context: ./services/supplier-portal
+      args:
+        TEMURIN_IMAGE: ${TEMURIN_IMAGE}
+    image: hengyuan/supplier-portal:local
+    hostname: supplier
+    networks:
+      dmz_net:
+        ipv4_address: 172.30.2.20
+      corp_net:
+        ipv4_address: 172.30.3.20
+    expose:
+      - "8080"
+    environment:
+      <<: *tz
+      FLAG_DMZ_FOOOTHOLD: ${FLAG_DMZ_FOOOTHOLD}
+      FLAG_DECOY_GIT: ${FLAG_DECOY_GIT}
+      JAVA_OPTS: "-Xmx256m -Xms128m"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    mem_limit: 384m
+
+  # ==========================================================================
+  # 办公网层 (corp_net)
+  # ==========================================================================
+  samba-dc:
+    <<: *common
+    build:
+      context: ./services/samba-dc
+      args:
+        DEBIAN_IMAGE: ${DEBIAN_IMAGE}
+    image: hengyuan/samba-dc:local
+    hostname: dc01
+    domainname: ${DOMAIN}
+    networks:
+      corp_net:
+        ipv4_address: 172.30.3.10
+      data_net:
+        ipv4_address: 172.30.5.10
+    expose:
+      - "53"
+      - "88"
+      - "135"
+      - "139"
+      - "389"
+      - "445"
+      - "464"
+      - "636"
+      - "3268"
+      - "3269"
+    environment:
+      <<: *tz
+      REALM: ${REALM}
+      NETBIOS: ${NETBIOS}
+      DOMAIN: ${DOMAIN}
+      DC_ADMIN_PW: ${DC_ADMIN_PW}
+      AD_CONTRACTOR_USER: ${AD_CONTRACTOR_USER}
+      AD_CONTRACTOR_PW: ${AD_CONTRACTOR_PW}
+      AD_SVC_SQL_USER: ${AD_SVC_SQL_USER}
+      AD_SVC_SQL_PW: ${AD_SVC_SQL_PW}
+      AD_SVC_BACKUP_USER: ${AD_SVC_BACKUP_USER}
+      AD_SVC_BACKUP_PW: ${AD_SVC_BACKUP_PW}
+      AD_ITADMIN_USER: ${AD_ITADMIN_USER}
+      AD_ITADMIN_PW: ${AD_ITADMIN_PW}
+      FLAG_ASREP: ${FLAG_ASREP}
+      FLAG_KERBEROAST: ${FLAG_KERBEROAST}
+      FLAG_ACL: ${FLAG_ACL}
+      FLAG_GOLDEN_TICKET: ${FLAG_GOLDEN_TICKET}
+      DNS_FORWARDER: 172.30.3.53
+      PG_SUPER_USER: ${PG_SUPER_USER}
+      PG_SUPER_PW: ${PG_SUPER_PW}
+      PG_DB: ${PG_DB}
+    volumes:
+      - samba_private:/var/lib/samba/private
+      - dc_backup:/backup
+    healthcheck:
+      test: ["CMD-SHELL", "ldapsearch -x -H ldap://127.0.0.1 -b '' -s base '(objectClass=*)' >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 8
+      start_period: 60s
+    mem_limit: 640m
+
+  nacos:
+    <<: *common
+    build:
+      context: ./services/nacos
+      args:
+        NACOS_IMAGE: ${NACOS_IMAGE}
+    image: hengyuan/nacos:local
+    hostname: nacos
+    networks:
+      corp_net:
+        ipv4_address: 172.30.3.30
+    expose:
+      - "8848"
+      - "9848"
+    environment:
+      <<: *tz
+      MODE: standalone
+      NACOS_AUTH_ENABLE: "true"
+      NACOS_AUTH_TOKEN: ${NACOS_AUTH_TOKEN}
+      NACOS_AUTH_IDENTITY_KEY: ${NACOS_AUTH_IDENTITY_KEY}
+      NACOS_AUTH_IDENTITY_VALUE: ${NACOS_AUTH_IDENTITY_VALUE}
+      JVM_XMS: 256m
+      JVM_XMX: 384m
+      SPRING_DATASOURCE_PLATFORM: derby
+      # 配置 loot 种子所需凭证 (entrypoint 导入 configs 时引用)
+      PG_APP_USER: ${PG_APP_USER}
+      PG_APP_PW: ${PG_APP_PW}
+      PG_DB: ${PG_DB}
+      FLAG_NACOS_CONFIG: ${FLAG_NACOS_CONFIG}
+      JENKINS_VENDOR_USER: ${JENKINS_VENDOR_USER}
+      JENKINS_VENDOR_PW: ${JENKINS_VENDOR_PW}
+    volumes:
+      - nacos_data:/home/nacos/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8848/nacos/v1/console/health/readiness >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 60s
+    mem_limit: 768m
+
+  oa:
+    <<: *common
+    build:
+      context: ./services/oa
+      args:
+        PYTHON_IMAGE: ${PYTHON_IMAGE}
+    image: hengyuan/oa:local
+    hostname: oa
+    networks:
+      corp_net:
+        ipv4_address: 172.30.3.31
+    expose:
+      - "8000"
+    environment:
+      <<: *tz
+      DOMAIN: ${DOMAIN}
+      FINANCE_CLERK_USER: ${FINANCE_CLERK_USER}
+      FINANCE_CLERK_PW: ${FINANCE_CLERK_PW}
+      FINANCE_DIRECTOR_USER: ${FINANCE_DIRECTOR_USER}
+      FINANCE_DIRECTOR_PW: ${FINANCE_DIRECTOR_PW}
+      REDIS_URL: redis://172.30.3.32:6379/0
+      FLAG_OA_BYPASS: ${FLAG_OA_BYPASS}
+      JENKINS_VENDOR_USER: ${JENKINS_VENDOR_USER}
+      JENKINS_VENDOR_PW: ${JENKINS_VENDOR_PW}
+    volumes:
+      - ./seed/employees.json:/app/seed/employees.json:ro
+    depends_on:
+      redis:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    mem_limit: 128m
+
+  redis:
+    <<: *common
+    image: ${REDIS_IMAGE}
+    hostname: redis
+    networks:
+      corp_net:
+        ipv4_address: 172.30.3.32
+    expose:
+      - "6379"
+    environment:
+      <<: *tz
+    volumes:
+      - ./services/redis/redis.conf:/usr/local/etc/redis/redis.conf:ro
+      - redis_data:/data
+    command: ["redis-server", "/usr/local/etc/redis/redis.conf"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    mem_limit: 64m
+
+  coredns:
+    <<: *common
+    image: ${COREDNS_IMAGE}
+    hostname: coredns
+    networks:
+      corp_net:
+        ipv4_address: 172.30.3.53
+    expose:
+      - "53"
+      - "53/udp"
+    environment:
+      <<: *tz
+    volumes:
+      - ./services/coredns/Corefile:/etc/coredns/Corefile:ro
+      - ./services/coredns/zones:/etc/coredns/zones:ro
+    command: ["-conf", "/etc/coredns/Corefile"]
+    # coredns 镜像为 scratch, 无 shell/工具, 不设 healthcheck
+    mem_limit: 32m
+
+  # ==========================================================================
+  # DevOps 层 — jenkins 双网卡 corp+devops = pivot; gitea 仅 devops
+  # ==========================================================================
+  jenkins:
+    <<: *common
+    build:
+      context: ./services/jenkins
+      args:
+        JENKINS_IMAGE: ${JENKINS_IMAGE}
+    image: hengyuan/jenkins:local
+    hostname: jenkins
+    networks:
+      corp_net:
+        ipv4_address: 172.30.3.40
+      devops_net:
+        ipv4_address: 172.30.4.40
+    expose:
+      - "8080"
+      - "50000"
+    environment:
+      <<: *tz
+      JAVA_OPTS: "-Xmx512m -Xms256m -Djenkins.install.runSetupWizard=false"
+      JENKINS_ADMIN_USER: ${JENKINS_ADMIN_USER}
+      JENKINS_ADMIN_PW: ${JENKINS_ADMIN_PW}
+      JENKINS_VENDOR_USER: ${JENKINS_VENDOR_USER}
+      JENKINS_VENDOR_PW: ${JENKINS_VENDOR_PW}
+      GITEA_ADMIN_USER: ${GITEA_ADMIN_USER}
+      GITEA_ADMIN_PW: ${GITEA_ADMIN_PW}
+      PG_APP_USER: ${PG_APP_USER}
+      PG_APP_PW: ${PG_APP_PW}
+      FLAG_JENKINS_CREDS: ${FLAG_JENKINS_CREDS}
+      FLAG_DECOY_JENKINS: ${FLAG_DECOY_JENKINS}
+      CASC_JENKINS_CONFIG: /usr/share/jenkins/casc.yaml
+    volumes:
+      - jenkins_home:/var/jenkins_home
+      - ./seed/keys/id_rsa:/usr/share/jenkins/ref/deploy_key/id_rsa:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/login >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 90s
+    mem_limit: 900m
+
+  gitea:
+    <<: *common
+    build:
+      context: ./services/gitea
+      args:
+        GITEA_IMAGE: ${GITEA_IMAGE}
+    image: hengyuan/gitea:local
+    hostname: gitea
+    networks:
+      devops_net:
+        ipv4_address: 172.30.4.20
+    expose:
+      - "3000"
+      - "22"
+    environment:
+      <<: *tz
+      GITEA_ADMIN_USER: ${GITEA_ADMIN_USER}
+      GITEA_ADMIN_PW: ${GITEA_ADMIN_PW}
+      DOMAIN: ${DOMAIN}
+      FLAG_GITEA_SSHKEY: ${FLAG_GITEA_SSHKEY}
+      DEPLOY_USER: ${DEPLOY_USER}
+    volumes:
+      - gitea_data:/data
+      - ./seed/keys:/seed/keys:ro
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/healthz >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 5s
+      retries: 8
+      start_period: 40s
+    mem_limit: 256m
+
+  # ==========================================================================
+  # 数据区 (data_net) — fileserver 双网卡 corp+data = pivot; postgres crown jewels
+  # ==========================================================================
+  fileserver:
+    <<: *common
+    build:
+      context: ./services/fileserver
+      args:
+        DEBIAN_IMAGE: ${DEBIAN_IMAGE}
+    image: hengyuan/fileserver:local
+    hostname: fileserver
+    domainname: ${DOMAIN}
+    networks:
+      corp_net:
+        ipv4_address: 172.30.3.50
+      data_net:
+        ipv4_address: 172.30.5.50
+    expose:
+      - "22"
+      - "139"
+      - "445"
+    environment:
+      <<: *tz
+      REALM: ${REALM}
+      NETBIOS: ${NETBIOS}
+      DOMAIN: ${DOMAIN}
+      DC_ADMIN_PW: ${DC_ADMIN_PW}
+      DEPLOY_USER: ${DEPLOY_USER}
+      AD_SVC_BACKUP_USER: ${AD_SVC_BACKUP_USER}
+      AD_SVC_BACKUP_PW: ${AD_SVC_BACKUP_PW}
+      PG_SUPER_USER: ${PG_SUPER_USER}
+      PG_SUPER_PW: ${PG_SUPER_PW}
+      PG_DB: ${PG_DB}
+      FLAG_DOMAIN_ADMIN: ${FLAG_DOMAIN_ADMIN}
+      FLAG_CROWN_JEWEL: ${FLAG_CROWN_JEWEL}
+    dns:
+      - 172.30.3.53
+    dns_search:
+      - ${DOMAIN}
+    volumes:
+      - dc_backup:/srv/shares/IT-backup:ro
+      - ./seed/keys:/seed/keys:ro
+    depends_on:
+      samba-dc:
+        condition: service_healthy
+      coredns:
+        condition: service_started
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep -x smbd >/dev/null 2>&1 || exit 1"]
+      interval: 20s
+      timeout: 10s
+      retries: 6
+      start_period: 40s
+    mem_limit: 128m
+
+  postgres:
+    <<: *common
+    image: ${POSTGRES_IMAGE}
+    hostname: postgres
+    networks:
+      data_net:
+        ipv4_address: 172.30.5.20
+    expose:
+      - "5432"
+    environment:
+      <<: *tz
+      POSTGRES_USER: ${PG_SUPER_USER}
+      POSTGRES_PASSWORD: ${PG_SUPER_PW}
+      POSTGRES_DB: ${PG_DB}
+      PG_APP_USER: ${PG_APP_USER}
+      PG_APP_PW: ${PG_APP_PW}
+      FLAG_DB_PII: ${FLAG_DB_PII}
+      FLAG_CROWN_JEWEL: ${FLAG_CROWN_JEWEL}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./services/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${PG_SUPER_USER} -d ${PG_DB}"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    mem_limit: 256m

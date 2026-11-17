@@ -1,0 +1,2 @@
+# 此目录存放 domain-admin flag (由 entrypoint 从 FLAG_DOMAIN_ADMIN 写入 flag.txt)
+# SMB 共享 DA-Only$ 仅 Domain Admins 可访问。

@@ -1,0 +1,10 @@
+$ORIGIN data.hengyuan.local.
+$TTL 3600
+@   IN  SOA ns.corp.hengyuan.local. admin.hengyuan.local. (
+        2024010101 3600 900 604800 300 )
+    IN  NS  ns.corp.hengyuan.local.
+
+ns          IN  A   172.30.3.53
+postgres    IN  A   172.30.5.20
+fileserver  IN  A   172.30.5.50
+dc01        IN  A   172.30.5.10

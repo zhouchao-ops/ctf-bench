@@ -1,0 +1,9 @@
+$ORIGIN devops.hengyuan.local.
+$TTL 3600
+@   IN  SOA ns.corp.hengyuan.local. admin.hengyuan.local. (
+        2024010101 3600 900 604800 300 )
+    IN  NS  ns.corp.hengyuan.local.
+
+ns          IN  A   172.30.3.53
+gitea       IN  A   172.30.4.20
+jenkins     IN  A   172.30.4.40

@@ -1,0 +1,35 @@
+# 内网 DNS 分区 (避免 split-brain):
+#   coredns 对服务子域 corp/devops/data.hengyuan.local 权威;
+#   AD 区 hengyuan.local (含 _ldap._tcp/_kerberos/_msdcs SRV) forward 到 Samba DC。
+# 攻击者经 pivot 将 DNS 指向 172.30.3.53 即可解析服务名 + AD SRV。
+
+corp.hengyuan.local:53 {
+    file /etc/coredns/zones/corp.hengyuan.local
+    log
+    errors
+}
+
+devops.hengyuan.local:53 {
+    file /etc/coredns/zones/devops.hengyuan.local
+    log
+    errors
+}
+
+data.hengyuan.local:53 {
+    file /etc/coredns/zones/data.hengyuan.local
+    log
+    errors
+}
+
+hengyuan.local:53 {
+    forward . 172.30.3.10
+    log
+    errors
+}
+
+.:53 {
+    forward . 1.1.1.1 8.8.8.8
+    cache 30
+    log
+    errors
+}
